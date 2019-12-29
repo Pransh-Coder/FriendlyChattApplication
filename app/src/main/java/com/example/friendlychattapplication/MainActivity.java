@@ -1,5 +1,6 @@
 package com.example.friendlychattapplication;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.InputFilter;
@@ -134,7 +135,7 @@ public class MainActivity extends AppCompatActivity {
                 mMessageEditText.setText("");
             }
         });
-        mchildEventListener = new ChildEventListener() {
+       /* mchildEventListener = new ChildEventListener() {
             @Override
             //DataSnapshot dataSnapshot - contains the data from firebase database
 
@@ -171,7 +172,8 @@ public class MainActivity extends AppCompatActivity {
         //The refrence defines what actually i'm listening to and listner obj derfines exactly what happens to the data
         mMessagesDatabaseRefrence.addChildEventListener(mchildEventListener);   //addChildEventListener()- Add a listener for child events ourring at this location. When child locations are added, removed, changed, or moved, the listener will be triggered for the appropriate event
 
-        mauthStateListener = new FirebaseAuth.AuthStateListener() {
+*/
+       mauthStateListener = new FirebaseAuth.AuthStateListener() {
             @Override
             public void onAuthStateChanged(@NonNull FirebaseAuth firebaseAuth) {
                 //The diff b/w FirebaseAuth firebaseAuth and the one which we created(mfirebaseAuth) is that this FirebaseAuth parameter only contins that whether at that moment the user is authenticated or not
@@ -182,9 +184,13 @@ public class MainActivity extends AppCompatActivity {
 
                 if (user!=null){
                     //User SignedIn
-                    Toast.makeText(MainActivity.this, "You are Signed In!!", Toast.LENGTH_SHORT).show();
+                    //Toast.makeText(MainActivity.this, "You are Signed In!!", Toast.LENGTH_SHORT).show();
+
+                    //In signup initialization we will pass username and we can get the username by taking the FirebaseUser obj i.e (user)
+                    onSignedInInitialize(user.getDisplayName());
                 }else {
                     //User SignedOut
+                    onSignedOutCleanup();
                     startActivityForResult(
                             AuthUI.getInstance()
                                     .createSignInIntentBuilder()
@@ -202,6 +208,21 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if(requestCode==RC_SIGN_IN){
+            if(resultCode==RESULT_OK){
+                Toast.makeText(this, "Signed In!", Toast.LENGTH_SHORT).show();
+            }
+            else if (resultCode==RESULT_CANCELED){
+                Toast.makeText(this, "Signed in Cancelled!", Toast.LENGTH_SHORT).show();
+                finish();
+            }
+        }
+    }
+
+    // will only show msg(Database) when user is logged in
+    @Override
     protected void onResume() {
         super.onResume();
         mfirebaseAuth.addAuthStateListener(mauthStateListener);     //add AuthState listner
@@ -212,6 +233,8 @@ public class MainActivity extends AppCompatActivity {
         super.onPause();
         //Removal of Authstate listner
         mfirebaseAuth.removeAuthStateListener(mauthStateListener);
+        dettachDatabaseReadListner();
+        mMessageAdapter.clear();
     }
 
     @Override
@@ -223,7 +246,80 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        return super.onOptionsItemSelected(item);
+        switch (item.getItemId()){
+            case R.id.sign_out_menu:
+                //sign out
+                AuthUI.getInstance().signOut(this);
+                return true;
+                default:
+                    return super.onOptionsItemSelected(item);
+        }
+    }
+    //In onSignedInInitialize we will set the username we can do that by taking my username memb variable
+    private void onSignedInInitialize(String username) {
+        mUsername = username;
+        attachDatabaseReadListner();
+
+    }
+
+    // this func will unset the username,clr the msgsList and detach the listner
+    // Teardown the UI
+    private void onSignedOutCleanup() {
+        mUsername =ANONYMOUS;
+        mMessageAdapter.clear();
+        dettachDatabaseReadListner();
+    }
+
+    private void attachDatabaseReadListner() {
+
+        if(mchildEventListener==null) {
+
+
+            //We have placed the code here becoz priorly thus code was in onCreate and for acessing database the user must be signedIn and this we are setting the username so it must be done before reading the database
+            mchildEventListener = new ChildEventListener() {
+                @Override
+                //DataSnapshot dataSnapshot - contains the data from firebase database
+
+                public void onChildAdded(@NonNull DataSnapshot dataSnapshot, @Nullable String s) {
+                    // This method is called whenever new message is inserted into the messages list
+                    // It is also called for every child message in the list when the listner is first attached (it means that for every child message that already exixt in the list the code in this method will be called
+
+                    //the message will be deserialized to a friedly message object i.e  "friendlyMessage"
+                    FriendlyMessage friendlyMessage = dataSnapshot.getValue(FriendlyMessage.class);                 //getValue()- to get data of new msg. the getValue parameter takes a class as an argument by passing in this parameter the (code will deserialize the msg from the database into our FriendlyMessage obj this works becoz our FriendlyMessage class has same feilds tht match with our database
+                    mMessageAdapter.add(friendlyMessage);
+                }
+
+                @Override
+                public void onChildChanged(@NonNull DataSnapshot dataSnapshot, @Nullable String s) {
+                    // This gets called when contents of exixting message gets changed
+                }
+
+                @Override
+                public void onChildRemoved(@NonNull DataSnapshot dataSnapshot) {
+                    //It is called when exixting child is deleted
+                }
+
+                @Override
+                public void onChildMoved(@NonNull DataSnapshot dataSnapshot, @Nullable String s) {
+                    // it is called if one of our messages changed position in the list
+                }
+
+                @Override
+                public void onCancelled(@NonNull DatabaseError databaseError) {
+                    //It indicates some sort of error occured when you are trying make changes
+                    //If gets called you do not have permission to read data
+                }
+            };
+            //The refrence defines what actually i'm listening to and listner obj derfines exactly what happens to the data
+            mMessagesDatabaseRefrence.addChildEventListener(mchildEventListener);   //addChildEventListener()- Add a listener for child events ourring at this location. When child locations are added, removed, changed, or moved, the listener will be triggered for the appropriate event
+        }
+    }
+    private void dettachDatabaseReadListner() {
+        if(mchildEventListener!=null){
+            mMessagesDatabaseRefrence.removeEventListener(mchildEventListener);
+            mchildEventListener=null;
+        }
+
     }
 }
 
